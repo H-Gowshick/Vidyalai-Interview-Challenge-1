@@ -1,9 +1,9 @@
 import axios from 'axios';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import styled from '@emotion/styled';
 import Post from './Post';
 import Container from '../common/Container';
-import useWindowWidth from '../hooks/useWindowWidth';
+import { WindowWidthContext } from '../hooks/WindowWidthContext'; // Importing context
 
 const PostListContainer = styled.div(() => ({
   display: 'flex',
@@ -22,7 +22,6 @@ const LoadMoreButton = styled.button(() => ({
   marginTop: 20,
   transition: 'background-color 0.3s ease',
   fontWeight: 600,
-
   '&:hover': {
     backgroundColor: '#0056b3',
   },
@@ -35,41 +34,55 @@ const LoadMoreButton = styled.button(() => ({
 export default function Posts() {
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [startIndex, setStartIndex] = useState(0);
 
-  const { isSmallerDevice } = useWindowWidth();
+  // custom hook
+  const { isSmallerDevice } = useContext(WindowWidthContext);
 
+  const [limit, setLimit] = useState(isSmallerDevice ? 5 : 10);
+
+  // Update limit when isSmallerDevice changes
   useEffect(() => {
-    const fetchPost = async () => {
-      const { data: posts } = await axios.get('/api/v1/posts', {
-        params: { start: 0, limit: isSmallerDevice ? 5 : 10 },
-      });
-      setPosts(posts);
-    };
-
-    fetchPost();
+    setLimit(isSmallerDevice ? 5 : 10);
   }, [isSmallerDevice]);
 
+  useEffect(() => {
+    fetchPost();
+  }, [startIndex, limit]);
+
+  // Function to fetch posts from the API
+  const fetchPost = async () => {
+    const { data: posts } = await axios.get('/api/v1/posts', {
+      params: { start: startIndex, limit },
+    });
+    setPosts(prevPosts => [...prevPosts, ...posts]);
+  };
+
+  // Handler for the "Load More" button click
   const handleClick = () => {
     setIsLoading(true);
-
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 3000);
+    setStartIndex(prevStartIndex => prevStartIndex + limit);
+    fetchPost().finally(() => setIsLoading(false));
   };
+
+  const hasMorePosts = posts.length % limit === 0;
 
   return (
     <Container>
       <PostListContainer>
+        {/* Render each post using the Post component */}
         {posts.map(post => (
-          <Post post={post} />
+          <Post key={post.id} post={post} />
         ))}
       </PostListContainer>
-
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <LoadMoreButton onClick={handleClick} disabled={isLoading}>
-          {!isLoading ? 'Load More' : 'Loading...'}
-        </LoadMoreButton>
-      </div>
+      {hasMorePosts && (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {/* Load More button */}
+          <LoadMoreButton onClick={handleClick} disabled={isLoading}>
+            {!isLoading ? 'Load More' : 'Loading...'}
+          </LoadMoreButton>
+        </div>
+      )}
     </Container>
   );
 }
